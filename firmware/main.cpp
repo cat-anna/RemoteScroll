@@ -1,10 +1,34 @@
 
-#include <Mouse.h>
 #include <Keyboard.h>
 #include <stdarg.h>
 #include <cppQueue.h>
 
-cppQueue	buttonQueue(1, 64, FIFO, true);	// Instantiate queue
+#include "decoder.h"
+#include "wheel.h"
+
+struct RemoteDecoderConfig {
+    enum {
+        Interrupt = 1,
+        DigitalPin = 2,
+
+        QueueSize = 32,
+        MaxPacketSize = 8,
+
+        StartBitDuration = 4500,
+        StopBitDuration = 7900,
+
+        StartBitDurationMargin = 500,
+        StopBitDurationMargin = 300,
+
+        DataBitDurationMargin = 100,
+        ZeroBitDuration = 350,
+        OneBitDuration = 700,
+    };
+};
+using Decoder = RemoteDecoder<RemoteDecoderConfig> ;
+Decoder remoteDecoder;
+
+MouseWheel wheelHandler;
 
 void Serialprint(const char* input...) {
   va_list args;
@@ -32,103 +56,18 @@ void p(unsigned char X) {
    Serial.print(X, HEX);
 }
 
-#define RECV_PIN 2
-#define RECV_INT 1
-
-#define EDGE_UP 1
-#define EDGE_DOWN 0
-
-#define MAX_BITS 64
-#define EXPECTED_LEN 40
-
-#define TEST_DURATION_BIT(dur) ((dur) > 550)
-#define TEST_DURATION_END(dur) ((dur) > 7000)
-#define TEST_DURATION_START(dur) ((dur) > 4500)
-
-struct RemotePacket {
-  int32_t address;
-  unsigned char button;
-};
-
-void HandleData(struct RemotePacket* data) {
-  RemotePacket packet = *data;
-
-  if(packet.address == 0xA0B3C325) {
-    // Serial.print("BUTTON ");
-    // Serial.print(packet.button, HEX);
-    // Serial.println();
-    buttonQueue.push(&packet.button);
-  }
-}
-
-void handleInterrupt() {
-  static unsigned long lastTime = 0;
-  static char lastValue = 0;
-  static char receiving = 0;
-  static unsigned char currentBit = 0;
-  static unsigned char receivedData[MAX_BITS / 8];
-
-  const char value = digitalRead(RECV_PIN);
-
-  if (value == lastValue) {
-    return;
-  }
-  lastValue = value;
-
-  const char edge_down = (value == 0);
-
-  const long time = micros();
-  const unsigned int duration = time - lastTime;
-  lastTime = time;
-
-  if (receiving) {
-    if (edge_down) {
-      if (currentBit < MAX_BITS) {
-        char bit = TEST_DURATION_BIT(duration);
-        receivedData[currentBit >> 3] |= (bit << (currentBit & 0b111));
-        ++currentBit;
-      }
-    } else {
-      if(TEST_DURATION_END(duration)) {
-        if (currentBit == EXPECTED_LEN) {
-          HandleData((RemotePacket*)receivedData);
-        }
-        receiving = 0;
-      }
+inline void WriteReceivedPacket(Decoder::QueueEntry &entry) {
+    uint8_t bytes = entry.bitLength / 8;
+    Serialprint("RECV len=%d data=", (int)bytes);
+    for(uint8_t i = 0; i < bytes; ++i) {
+      p(entry.data[i]);
     }
-  } else {
-    if(edge_down && TEST_DURATION_START(duration)) {
-      receiving = 1;
-      currentBit = 0;
-      for(int i = 0; i < sizeof(receivedData); ++i)
-        receivedData[i] = 0;
-    }
-  }
+    Serial.println();
 }
 
-void setup() {
-  // pinMode(mouseWheel, INPUT);
-  // initialize mouse control:
-  Mouse.begin();
-  Keyboard.begin();
-
-  Serial.begin(9600);
-
-  pinMode(RECV_PIN, INPUT);
-  attachInterrupt(RECV_INT, handleInterrupt, CHANGE);
-  sei();
-}
-
-#define WHEEL_TICK 100
-
-int lastWheelTick = 0;
-signed char wheelValue = 0;
-
-int lastTick = 0;
-
-unsigned char currentButton = 0;
-int lastButtonTick = 0;
-int lastButtonDownTick = 0;
+// unsigned char currentButton = 0;
+// int lastButtonTick = 0;
+// int lastButtonDownTick = 0;
 
 #define ACTION_DOWN 1
 #define ACTION_UP 2
@@ -141,6 +80,23 @@ int lastButtonDownTick = 0;
 
 #define LONG_PRESS_DURATION (2000)
 
+// struct RemotePacket {
+//   int32_t address;
+//   unsigned char button;
+// };
+
+// void HandleData(struct RemotePacket* data) {
+//   RemotePacket packet = *data;
+
+//   if(packet.address == 0xA0B3C325) {
+//     // Serial.print("BUTTON ");
+//     // Serial.print(packet.button, HEX);
+//     // Serial.println();
+//     buttonQueue.push(&packet.button);
+//   }
+// }
+
+#if 0
 void HandleButton(unsigned char btn, unsigned char action, unsigned char longPress) {
   Serialprint("BTN %d %x %d\n", (int)action, (int)btn, (int)longPress);
 
@@ -167,13 +123,36 @@ void HandleButton(unsigned char btn, unsigned char action, unsigned char longPre
   }
 }
 
-void loop() {
-  int now = millis();
+#endif
 
-  if(now - lastWheelTick > WHEEL_TICK) {
-    lastWheelTick = now;
-    Mouse.move(0, 0, wheelValue);
+void setup() {
+  Serial.begin(9600);
+
+  Mouse.begin();
+  Keyboard.begin();
+
+  remoteDecoder.Begin();
+  wheelHandler.Begin();
+
+  sei();
+}
+
+void loop() {
+  wheelHandler.Update();
+
+  Decoder::QueueEntry entry;
+  while(remoteDecoder.Next(&entry))
+  {
+    WriteReceivedPacket(entry);
+
+
   }
+}
+
+#if 0
+
+void loop2() {
+  int now = millis();
 
   if((currentButton != 0) && (now - lastButtonTick > 200)) {
       HandleButton(currentButton, ACTION_RESET, (now - lastButtonDownTick) > LONG_PRESS_DURATION);
@@ -191,8 +170,6 @@ void loop() {
 
     unsigned char releaseBtn = (button & 0xF) | ((~button) & 0xF0);
 
-    // Serialprint("H %x %x %x\n", (int)currentButton, (int)button, (int)releaseBtn);
-
     if(currentButton == releaseBtn) {
       HandleButton(currentButton, ACTION_UP, (now - lastButtonDownTick) > LONG_PRESS_DURATION);
       currentButton = button;
@@ -209,3 +186,4 @@ void loop() {
     }
   }
 }
+#endif
