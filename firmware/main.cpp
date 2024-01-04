@@ -1,6 +1,6 @@
 
-#include "Mouse.h"
-#include "Keyboard.h"
+#include <Mouse.h>
+#include <Keyboard.h>
 #include <stdarg.h>
 #include <cppQueue.h>
 
@@ -31,9 +31,6 @@ void p(unsigned char X) {
    if (X < 16) {Serial.print("0");}
    Serial.print(X, HEX);
 }
-
-// int range = 5;           // output range of X or Y movement; affects movement speed
-// int responseDelay = 200;  // response delay of the mouse, in ms
 
 #define RECV_PIN 2
 #define RECV_INT 1
@@ -102,8 +99,8 @@ void handleInterrupt() {
   } else {
     if(edge_down && TEST_DURATION_START(duration)) {
       receiving = 1;
-      currentBit = 0;  
-      for(int i = 0; i < sizeof(receivedData); ++i)    
+      currentBit = 0;
+      for(int i = 0; i < sizeof(receivedData); ++i)
         receivedData[i] = 0;
     }
   }
@@ -146,7 +143,7 @@ int lastButtonDownTick = 0;
 
 void HandleButton(unsigned char btn, unsigned char action, unsigned char longPress) {
   Serialprint("BTN %d %x %d\n", (int)action, (int)btn, (int)longPress);
-  
+
   switch(btn){
     case BTN_UP:
       if (action == ACTION_DOWN)
@@ -159,7 +156,7 @@ void HandleButton(unsigned char btn, unsigned char action, unsigned char longPre
       if (action == ACTION_DOWN)
         wheelValue = -1;
       else
-        wheelValue = 0;        
+        wheelValue = 0;
       return;
 
     case BTN_STP:
@@ -184,7 +181,7 @@ void loop() {
   }
 
   while(!buttonQueue.isEmpty())
-  {   
+  {
     unsigned char button;
     if(!buttonQueue.pop(&button)) {
       break;
@@ -200,7 +197,7 @@ void loop() {
       HandleButton(currentButton, ACTION_UP, (now - lastButtonDownTick) > LONG_PRESS_DURATION);
       currentButton = button;
       continue;
-    } 
+    }
     else if(currentButton != button) {
       HandleButton(button, ACTION_DOWN, 0);
       lastButtonDownTick = now;
