@@ -16,10 +16,12 @@ public:
     void Begin() {}
 
     void Update() {
-        int now = millis();
-        if((now - lastTick) > WheelTick) {
-            lastTick = now;
-            Mouse.move(0, 0, wheelValue);
+        if(wheelValue != 0){
+            int now = millis();
+            if((now - lastTick) > WheelTick) {
+                lastTick = now;
+                Mouse.move(0, 0, wheelValue);
+            }
         }
     }
     void SetValue(signed char value) {
