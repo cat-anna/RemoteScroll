@@ -2,7 +2,14 @@
 
 #include <Mouse.h>
 
-#define WHEEL_TICK 100
+namespace Wheel
+{
+
+static constexpr int8_t WheelTick = 100;
+
+static constexpr int8_t WheelUp = 1;
+static constexpr int8_t WheelDown = -1;
+static constexpr int8_t WheelStop = 0;
 
 class MouseWheel {
 public:
@@ -10,7 +17,7 @@ public:
 
     void Update() {
         int now = millis();
-        if(now - lastTick > WHEEL_TICK) {
+        if((now - lastTick) > WheelTick) {
             lastTick = now;
             Mouse.move(0, 0, wheelValue);
         }
@@ -23,3 +30,4 @@ private:
     signed char wheelValue = 0;
 };
 
+} // namespace Wheel
